@@ -1,5 +1,5 @@
 import { addEdge, useEdgesState, useNodesState, type Connection } from "@xyflow/react";
-import { Check, Download, Loader2, LogOut, Plus, Save, Settings2 } from "lucide-react";
+import { Check, Download, Loader2, LogOut, PhoneCall, Plus, Save, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AgentSummary,
@@ -16,6 +16,7 @@ import { flowToGraph, graphToFlow, type FlowMeta, type Selection, type VoxEdge, 
 import { SidePanel } from "./flow/SidePanel";
 import { sampleFlow } from "./sampleFlow";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { TestPanel } from "./test/TestPanel";
 import { clearKey, getKey } from "./zernio/api";
 import { CallsPanel } from "./zernio/CallsPanel";
 import { ConnectCard } from "./zernio/ConnectCard";
@@ -32,6 +33,7 @@ export function App() {
   const [selection, setSelection] = useState<Selection>({ kind: "closed" });
   const [view, setView] = useState<NavKey>("builder");
   const [connected, setConnected] = useState(Boolean(getKey()));
+  const [testing, setTesting] = useState(false);
 
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -166,6 +168,16 @@ export function App() {
               <Button variant="ghost" size="sm" onClick={exportFlow}>
                 <Download className="size-4" /> Export
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelection({ kind: "closed" });
+                  setTesting(true);
+                }}
+              >
+                <PhoneCall className="size-4" /> Test call
+              </Button>
               <Button size="sm" onClick={save} disabled={saveState === "saving" || apiDown}>
                 {saveState === "saving" ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -205,12 +217,21 @@ export function App() {
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
-                  onNodeClick={(id) => setSelection({ kind: "node", id })}
-                  onEdgeClick={(id) => setSelection({ kind: "edge", id })}
+                  onNodeClick={(id) => {
+                    setTesting(false);
+                    setSelection({ kind: "node", id });
+                  }}
+                  onEdgeClick={(id) => {
+                    setTesting(false);
+                    setSelection({ kind: "edge", id });
+                  }}
                   onPaneClick={() => setSelection({ kind: "closed" })}
                 />
               </div>
-              {selection.kind !== "closed" && (
+              {testing ? (
+                <TestPanel agentId={agentId} onClose={() => setTesting(false)} />
+              ) : (
+                selection.kind !== "closed" && (
                 <SidePanel
                   selection={selection}
                   node={selNode}
@@ -222,6 +243,7 @@ export function App() {
                   onDeleteNode={deleteNode}
                   onClose={() => setSelection({ kind: "closed" })}
                 />
+                )
               )}
             </div>
           )}

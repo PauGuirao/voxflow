@@ -2,8 +2,10 @@ import { Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { LLM_MODELS, STT_MODELS, TTS_MODELS, TTS_VOICES } from "./model-catalog";
 import type { FlowMeta, Selection, VoxEdge, VoxNode } from "./model";
 
 const textLabel = (kind: VoxNode["data"]["kind"]) =>
@@ -20,6 +22,35 @@ function Header({ title, onClose }: { title: string; onClose: () => void }) {
   );
 }
 
+function ModelSelect({ value, options, onChange }: { value: string; options: readonly string[]; onChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-8">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>
+            {o}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ModelLeg({ label, provider, children }: { label: string; provider: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs font-medium">{label}</span>
+        <span className="text-muted-foreground text-[11px]">{provider}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function SidePanel(props: {
   selection: Selection;
   node?: VoxNode;
@@ -31,8 +62,9 @@ export function SidePanel(props: {
   onDeleteNode: (id: string) => void;
   onClose: () => void;
 }) {
-  const { selection } = props;
+  const { selection, meta } = props;
   const shell = "bg-card flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l p-4";
+  const setModels = (patch: Partial<FlowMeta["models"]>) => props.onPatchMeta({ models: { ...meta.models, ...patch } });
 
   if (selection.kind === "node" && props.node) {
     const node = props.node;
@@ -91,7 +123,6 @@ export function SidePanel(props: {
   }
 
   if (selection.kind === "global") {
-    const { meta } = props;
     return (
       <aside className={shell}>
         <Header title="Global settings" onClose={props.onClose} />
@@ -101,13 +132,21 @@ export function SidePanel(props: {
           <p className="text-muted-foreground text-xs">Prepended to every node prompt.</p>
         </div>
         <Separator />
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-3">
           <Label>Models</Label>
-          <div className="text-muted-foreground space-y-0.5 text-xs">
-            <div>STT · {meta.models.stt.provider}/{meta.models.stt.model}</div>
-            <div>LLM · {meta.models.llm.provider}/{meta.models.llm.model}</div>
-            <div>TTS · {meta.models.tts.provider}/{meta.models.tts.model} ({meta.models.tts.voice})</div>
-          </div>
+          <ModelLeg label="Speech-to-text" provider={meta.models.stt.provider}>
+            <ModelSelect value={meta.models.stt.model} options={STT_MODELS} onChange={(model) => setModels({ stt: { ...meta.models.stt, model } })} />
+          </ModelLeg>
+          <ModelLeg label="Language model" provider={meta.models.llm.provider}>
+            <ModelSelect value={meta.models.llm.model} options={LLM_MODELS} onChange={(model) => setModels({ llm: { ...meta.models.llm, model } })} />
+          </ModelLeg>
+          <ModelLeg label="Text-to-speech" provider={meta.models.tts.provider}>
+            <div className="grid grid-cols-2 gap-2">
+              <ModelSelect value={meta.models.tts.model} options={TTS_MODELS} onChange={(model) => setModels({ tts: { ...meta.models.tts, model } })} />
+              <ModelSelect value={meta.models.tts.voice} options={TTS_VOICES} onChange={(voice) => setModels({ tts: { ...meta.models.tts, voice } })} />
+            </div>
+          </ModelLeg>
+          <p className="text-muted-foreground text-xs">Keys for these providers live in Settings.</p>
         </div>
       </aside>
     );
