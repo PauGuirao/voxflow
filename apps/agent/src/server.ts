@@ -1,6 +1,6 @@
 import { WebSocketServer } from "ws";
 import { loadFlow } from "./flow-store.ts";
-import { stubProviders } from "./providers/stub.ts";
+import { buildProviders } from "./providers/index.ts";
 import { startCallSession, type CallSession } from "./session.ts";
 
 /**
@@ -48,7 +48,7 @@ export function startServer(opts: { port: number }): WebSocketServer {
           const flow = await loadFlow(agentId);
           session = startCallSession({
             flow,
-            providers: stubProviders(),
+            providers: buildProviders(flow.models),
             sendFrame,
             hangup: () => ws.close(),
           });
