@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { FlowNode } from "@voxflow/flow";
+import type { VoxNodeData } from "./model";
 
 const palette = {
   start: { border: "#16a34a", label: "#15803d" },
@@ -7,35 +7,41 @@ const palette = {
   end: { border: "#dc2626", label: "#b91c1c" },
 } as const;
 
-function body(node: FlowNode): string {
-  if (node.kind === "start") return node.greeting;
-  if (node.kind === "end") return node.farewell;
-  return node.prompt;
-}
-
-/** One card renderer keyed by node kind (registered under each kind below). */
-function VoxNode({ data }: NodeProps) {
-  const node = (data as { node: FlowNode }).node;
-  const c = palette[node.kind];
+function VoxNode({ data, selected }: NodeProps) {
+  const d = data as VoxNodeData;
+  const c = palette[d.kind];
   return (
     <div
       style={{
         width: 240,
         borderRadius: 12,
-        border: `2px solid ${c.border}`,
+        border: `2px solid ${selected ? c.label : c.border}`,
         background: "#fff",
         padding: 12,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        boxShadow: selected ? `0 0 0 3px ${c.border}33` : "0 1px 3px rgba(0,0,0,0.08)",
         fontFamily: "system-ui, sans-serif",
+        cursor: "grab",
       }}
     >
-      {node.kind !== "start" && <Handle type="target" position={Position.Left} />}
+      {d.kind !== "start" && <Handle type="target" position={Position.Left} />}
       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: c.label, fontWeight: 700 }}>
-        {node.kind}
+        {d.kind}
       </div>
-      <div style={{ fontWeight: 600, margin: "2px 0 6px", color: "#0f172a" }}>{node.name || node.id}</div>
-      <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.4 }}>{body(node) || <em>—</em>}</div>
-      {node.kind !== "end" && <Handle type="source" position={Position.Right} />}
+      <div style={{ fontWeight: 600, margin: "2px 0 6px", color: "#0f172a" }}>{d.name || "(untitled)"}</div>
+      <div
+        style={{
+          fontSize: 12,
+          color: "#475569",
+          lineHeight: 1.4,
+          display: "-webkit-box",
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
+        {d.text || <em>—</em>}
+      </div>
+      {d.kind !== "end" && <Handle type="source" position={Position.Right} />}
     </div>
   );
 }

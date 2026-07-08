@@ -1,0 +1,19 @@
+{
+  "name": "@voxflow/api",
+  "version": "0.1.0",
+  "description": "Voxflow proxy: relays the studio's Zernio calls (numbers, calls, agent assignment) so the API key stays out of the browser.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --env-file-if-exists=.env src/index.ts",
+    "start": "node --experimental-strip-types --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@voxflow/zernio": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
