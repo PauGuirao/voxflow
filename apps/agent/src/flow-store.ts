@@ -16,8 +16,10 @@ export async function loadFlow(agentId: string): Promise<Flow> {
   try {
     const res = await fetch(`${API_BASE}/api/agents/${encodeURIComponent(agentId)}`, { cache: "no-store" });
     if (res.ok) {
-      const { agent } = (await res.json()) as { agent?: { flow?: unknown } };
-      if (agent?.flow) return parseFlow(agent.flow);
+      // Serve the PUBLISHED version; fall back to the draft only before first publish.
+      const { agent } = (await res.json()) as { agent?: { flow?: unknown; publishedFlow?: unknown } };
+      const live = agent?.publishedFlow ?? agent?.flow;
+      if (live) return parseFlow(live);
     }
   } catch {
     // API down — fall back to bundled flows below

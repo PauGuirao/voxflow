@@ -10,10 +10,14 @@ const DATA_FILE = join(here, "..", "data", "agents.json");
 export interface AgentRecord {
   id: string;
   name: string;
+  /** The draft — what the studio edits and Saves. */
   flow: Flow;
   updatedAt: string;
+  /** The live version the runtime serves. Absent until first Publish. */
+  publishedFlow?: Flow;
+  publishedAt?: string;
 }
-export type AgentSummary = Pick<AgentRecord, "id" | "name" | "updatedAt">;
+export type AgentSummary = Pick<AgentRecord, "id" | "name" | "updatedAt" | "publishedAt">;
 
 /** Starter graph for a freshly created agent. */
 function defaultFlow(name: string): Flow {
@@ -65,7 +69,17 @@ async function persist(): Promise<void> {
 }
 
 export async function listAgents(): Promise<AgentSummary[]> {
-  return (await load()).map(({ id, name, updatedAt }) => ({ id, name, updatedAt }));
+  return (await load()).map(({ id, name, updatedAt, publishedAt }) => ({ id, name, updatedAt, publishedAt }));
+}
+
+/** Promote the current draft to live — this is what the runtime starts serving. */
+export async function publishAgent(id: string): Promise<AgentRecord | undefined> {
+  const record = (await load()).find((a) => a.id === id);
+  if (!record) return undefined;
+  record.publishedFlow = parseFlow(record.flow);
+  record.publishedAt = new Date().toISOString();
+  await persist();
+  return record;
 }
 
 export async function getAgent(id: string): Promise<AgentRecord | undefined> {

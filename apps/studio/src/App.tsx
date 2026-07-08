@@ -1,5 +1,5 @@
 import { addEdge, useEdgesState, useNodesState, type Connection } from "@xyflow/react";
-import { Check, Download, LayoutGrid, Loader2, LogOut, PhoneCall, Plus, Save, Settings2 } from "lucide-react";
+import { Check, Download, LayoutGrid, Loader2, LogOut, PhoneCall, Plus, Rocket, Save, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AgentSummary,
@@ -7,6 +7,7 @@ import {
   deleteAgent as apiDelete,
   getAgentFlow,
   listAgents,
+  publishAgent,
   saveAgentFlow,
 } from "@/agents/api";
 import { AppSidebar, type NavKey } from "@/components/app-sidebar";
@@ -38,6 +39,7 @@ export function App() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [publishing, setPublishing] = useState(false);
   const [apiDown, setApiDown] = useState(false);
 
   const loadInto = useCallback(
@@ -96,7 +98,24 @@ export function App() {
     setSelection({ kind: "closed" });
   };
 
-  const activeName = agents.find((a) => a.id === activeId)?.name ?? "sample";
+  const activeAgent = agents.find((a) => a.id === activeId);
+  const activeName = activeAgent?.name ?? "sample";
+  // Unpublished = the draft (updatedAt) is newer than what's live (publishedAt).
+  const unpublished = activeAgent ? !activeAgent.publishedAt || activeAgent.updatedAt > activeAgent.publishedAt : false;
+
+  const publish = async () => {
+    if (!activeId) return;
+    setPublishing(true);
+    try {
+      await saveAgentFlow(activeId, graphToFlow(nodes, edges, meta), activeName);
+      await publishAgent(activeId);
+      setAgents(await listAgents());
+    } catch {
+      // leave state as-is
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const save = async () => {
     if (!activeId) return;
@@ -181,7 +200,7 @@ export function App() {
               >
                 <PhoneCall className="size-4" /> Test call
               </Button>
-              <Button size="sm" onClick={save} disabled={saveState === "saving" || apiDown}>
+              <Button variant="outline" size="sm" onClick={save} disabled={saveState === "saving" || apiDown}>
                 {saveState === "saving" ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : saveState === "saved" ? (
@@ -190,6 +209,15 @@ export function App() {
                   <Save className="size-4" />
                 )}
                 {saveState === "saved" ? "Saved" : "Save"}
+              </Button>
+              <Button
+                size="sm"
+                variant={unpublished ? "default" : "ghost"}
+                onClick={publish}
+                disabled={publishing || apiDown || !unpublished}
+              >
+                {publishing ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+                {unpublished ? "Publish" : "Live"}
               </Button>
             </>
           ) : (

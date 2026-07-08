@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ZernioClient, type Channel } from "@voxflow/zernio";
 import { getProviderKeys, type ProviderKeys, providerStatus, setProviderKeys } from "./settings.ts";
-import { createAgent, deleteAgent, getAgent, listAgents, saveAgent } from "./store.ts";
+import { createAgent, deleteAgent, getAgent, listAgents, publishAgent, saveAgent } from "./store.ts";
 
 const PORT = Number(process.env.API_PORT ?? 8788);
 const AGENT_WSS = process.env.AGENT_PUBLIC_WSS_URL ?? "ws://localhost:8787";
@@ -56,6 +56,11 @@ const server = createServer(async (req, res) => {
         if (!body.name?.trim()) return send(res, 400, { error: "name is required" });
         return send(res, 200, { agent: await createAgent(body.name.trim()) });
       }
+    }
+    const publishMatch = path.match(/^\/api\/agents\/([^/]+)\/publish$/);
+    if (publishMatch && method === "POST") {
+      const a = await publishAgent(decodeURIComponent(publishMatch[1]!));
+      return a ? send(res, 200, { agent: a }) : send(res, 404, { error: "Agent not found" });
     }
     const agentMatch = path.match(/^\/api\/agents\/([^/]+)$/);
     if (agentMatch) {

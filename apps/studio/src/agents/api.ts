@@ -6,6 +6,7 @@ export interface AgentSummary {
   id: string;
   name: string;
   updatedAt: string;
+  publishedAt?: string;
 }
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
@@ -33,6 +34,10 @@ export async function getAgentFlow(id: string): Promise<Flow> {
 
 export async function saveAgentFlow(id: string, flow: Flow, name?: string): Promise<void> {
   await j(`/api/agents/${id}`, { method: "PUT", body: JSON.stringify({ flow, name }) });
+}
+
+export async function publishAgent(id: string): Promise<void> {
+  await j(`/api/agents/${id}/publish`, { method: "POST" });
 }
 
 export async function deleteAgent(id: string): Promise<void> {
