@@ -1,31 +1,24 @@
-import type { CSSProperties } from "react";
+import { Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import type { FlowMeta, Selection, VoxEdge, VoxNode } from "./model";
-
-const wrap: CSSProperties = {
-  width: 340,
-  borderLeft: "1px solid #e2e8f0",
-  background: "#fff",
-  padding: 16,
-  overflowY: "auto",
-  fontFamily: "system-ui, sans-serif",
-  display: "flex",
-  flexDirection: "column",
-  gap: 14,
-};
-const label: CSSProperties = { fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 4 };
-const input: CSSProperties = {
-  width: "100%",
-  padding: "8px 10px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  fontSize: 13,
-  fontFamily: "inherit",
-  boxSizing: "border-box",
-};
-const textarea: CSSProperties = { ...input, minHeight: 120, resize: "vertical", lineHeight: 1.4 };
 
 const textLabel = (kind: VoxNode["data"]["kind"]) =>
   kind === "start" ? "Greeting" : kind === "end" ? "Farewell" : "Prompt";
+
+function Header({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <h2 className="text-sm font-semibold capitalize">{title}</h2>
+      <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
+        <X className="size-4" />
+      </Button>
+    </div>
+  );
+}
 
 export function SidePanel(props: {
   selection: Selection;
@@ -39,43 +32,37 @@ export function SidePanel(props: {
   onClose: () => void;
 }) {
   const { selection } = props;
-
-  const header = (title: string) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <strong style={{ fontSize: 14, color: "#0f172a" }}>{title}</strong>
-      <button onClick={props.onClose} style={{ border: "none", background: "none", cursor: "pointer", color: "#64748b", fontSize: 18 }}>
-        ×
-      </button>
-    </div>
-  );
+  const shell = "bg-card flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l p-4";
 
   if (selection.kind === "node" && props.node) {
     const node = props.node;
     const d = node.data;
     return (
-      <aside style={wrap}>
-        {header(`${d.kind} node`)}
-        <div>
-          <div style={label}>Name</div>
-          <input style={input} value={d.name} onChange={(e) => props.onPatchNode(node.id, { name: e.target.value })} />
+      <aside className={shell}>
+        <Header title={`${d.kind} node`} onClose={props.onClose} />
+        <div className="flex flex-col gap-1.5">
+          <Label>Name</Label>
+          <Input value={d.name} onChange={(e) => props.onPatchNode(node.id, { name: e.target.value })} />
         </div>
-        <div>
-          <div style={label}>{textLabel(d.kind)}</div>
-          <textarea
-            style={textarea}
+        <div className="flex flex-col gap-1.5">
+          <Label>{textLabel(d.kind)}</Label>
+          <Textarea
+            className="min-h-32"
             placeholder={d.kind === "conversation" ? "What the agent should do in this step…" : "What the agent says…"}
             value={d.text}
             onChange={(e) => props.onPatchNode(node.id, { text: e.target.value })}
           />
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Use {"{{variable}}"} for runtime values.</div>
+          <p className="text-muted-foreground text-xs">
+            Use <code className="bg-muted rounded px-1">{"{{variable}}"}</code> for runtime values.
+          </p>
         </div>
         {d.kind !== "start" && (
-          <button
-            onClick={() => props.onDeleteNode(node.id)}
-            style={{ ...input, color: "#dc2626", cursor: "pointer", fontWeight: 600, borderColor: "#fecaca", background: "#fef2f2" }}
-          >
-            Delete node
-          </button>
+          <>
+            <Separator />
+            <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => props.onDeleteNode(node.id)}>
+              <Trash2 className="size-4" /> Delete node
+            </Button>
+          </>
         )}
       </aside>
     );
@@ -84,20 +71,20 @@ export function SidePanel(props: {
   if (selection.kind === "edge" && props.edge) {
     const edge = props.edge;
     return (
-      <aside style={wrap}>
-        {header("Transition")}
-        <div>
-          <div style={label}>Condition</div>
-          <textarea
-            style={textarea}
+      <aside className={shell}>
+        <Header title="Transition" onClose={props.onClose} />
+        <div className="flex flex-col gap-1.5">
+          <Label>Condition</Label>
+          <Textarea
+            className="min-h-32"
             placeholder="e.g. the caller confirmed their appointment"
             value={edge.data?.condition ?? ""}
             onChange={(e) => props.onPatchEdge(edge.id, e.target.value)}
           />
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+          <p className="text-muted-foreground text-xs">
             The agent moves along this edge when the conversation satisfies the condition. Leave empty for an
             unconditional default.
-          </div>
+          </p>
         </div>
       </aside>
     );
@@ -106,25 +93,20 @@ export function SidePanel(props: {
   if (selection.kind === "global") {
     const { meta } = props;
     return (
-      <aside style={wrap}>
-        {header("Global settings")}
-        <div>
-          <div style={label}>Global prompt</div>
-          <textarea
-            style={textarea}
-            value={meta.globalPrompt}
-            onChange={(e) => props.onPatchMeta({ globalPrompt: e.target.value })}
-          />
-          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Prepended to every node prompt.</div>
+      <aside className={shell}>
+        <Header title="Global settings" onClose={props.onClose} />
+        <div className="flex flex-col gap-1.5">
+          <Label>Global prompt</Label>
+          <Textarea className="min-h-40" value={meta.globalPrompt} onChange={(e) => props.onPatchMeta({ globalPrompt: e.target.value })} />
+          <p className="text-muted-foreground text-xs">Prepended to every node prompt.</p>
         </div>
-        <div>
-          <div style={label}>Models</div>
-          <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
-            STT: {meta.models.stt.provider}/{meta.models.stt.model}
-            <br />
-            LLM: {meta.models.llm.provider}/{meta.models.llm.model}
-            <br />
-            TTS: {meta.models.tts.provider}/{meta.models.tts.model} ({meta.models.tts.voice})
+        <Separator />
+        <div className="flex flex-col gap-1.5">
+          <Label>Models</Label>
+          <div className="text-muted-foreground space-y-0.5 text-xs">
+            <div>STT · {meta.models.stt.provider}/{meta.models.stt.model}</div>
+            <div>LLM · {meta.models.llm.provider}/{meta.models.llm.model}</div>
+            <div>TTS · {meta.models.tts.provider}/{meta.models.tts.model} ({meta.models.tts.voice})</div>
           </div>
         </div>
       </aside>

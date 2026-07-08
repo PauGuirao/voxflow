@@ -3,7 +3,9 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "noEmit": true,
-    "types": []
+    "types": [],
+    "baseUrl": ".",
+    "paths": { "@/*": ["src/*"] }
   },
   "include": ["src"]
 }

@@ -22,6 +22,18 @@ export interface PhoneNumber {
   forwardTo: string | null;
 }
 
+export interface CallRecord {
+  id: string;
+  from: string;
+  to: string;
+  channel: "whatsapp" | "pstn";
+  direction: "inbound" | "outbound";
+  status: string;
+  durationSeconds: number | null;
+  billableCostUSD: number | null;
+  createdAt: string;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -35,6 +47,11 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export async function listNumbers(): Promise<PhoneNumber[]> {
   const { phoneNumbers } = await req<{ phoneNumbers: PhoneNumber[] }>("/api/phone-numbers");
   return phoneNumbers;
+}
+
+export async function listCalls(): Promise<CallRecord[]> {
+  const { calls } = await req<{ calls: CallRecord[] }>("/api/calls");
+  return calls;
 }
 
 export async function assignAgent(input: {

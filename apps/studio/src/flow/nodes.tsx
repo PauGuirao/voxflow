@@ -1,47 +1,28 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { cn } from "@/lib/utils";
 import type { VoxNodeData } from "./model";
 
-const palette = {
-  start: { border: "#16a34a", label: "#15803d" },
-  conversation: { border: "#2563eb", label: "#1d4ed8" },
-  end: { border: "#dc2626", label: "#b91c1c" },
+const accent = {
+  start: "text-emerald-600 border-l-emerald-500",
+  conversation: "text-blue-600 border-l-blue-500",
+  end: "text-rose-600 border-l-rose-500",
 } as const;
 
 function VoxNode({ data, selected }: NodeProps) {
   const d = data as VoxNodeData;
-  const c = palette[d.kind];
   return (
     <div
-      style={{
-        width: 240,
-        borderRadius: 12,
-        border: `2px solid ${selected ? c.label : c.border}`,
-        background: "#fff",
-        padding: 12,
-        boxShadow: selected ? `0 0 0 3px ${c.border}33` : "0 1px 3px rgba(0,0,0,0.08)",
-        fontFamily: "system-ui, sans-serif",
-        cursor: "grab",
-      }}
+      className={cn(
+        "bg-card w-60 rounded-lg border border-l-4 p-3 shadow-sm transition-shadow",
+        accent[d.kind],
+        selected ? "ring-ring/50 ring-2" : "hover:shadow-md",
+      )}
     >
-      {d.kind !== "start" && <Handle type="target" position={Position.Left} />}
-      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: c.label, fontWeight: 700 }}>
-        {d.kind}
-      </div>
-      <div style={{ fontWeight: 600, margin: "2px 0 6px", color: "#0f172a" }}>{d.name || "(untitled)"}</div>
-      <div
-        style={{
-          fontSize: 12,
-          color: "#475569",
-          lineHeight: 1.4,
-          display: "-webkit-box",
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-        }}
-      >
-        {d.text || <em>—</em>}
-      </div>
-      {d.kind !== "end" && <Handle type="source" position={Position.Right} />}
+      {d.kind !== "start" && <Handle type="target" position={Position.Left} className="!size-2.5 !border-2" />}
+      <div className={cn("text-[10px] font-bold tracking-wide uppercase", accent[d.kind].split(" ")[0])}>{d.kind}</div>
+      <div className="text-foreground mt-0.5 mb-1 truncate font-semibold">{d.name || "(untitled)"}</div>
+      <div className="text-muted-foreground line-clamp-3 text-xs leading-snug">{d.text || <em>—</em>}</div>
+      {d.kind !== "end" && <Handle type="source" position={Position.Right} className="!size-2.5 !border-2" />}
     </div>
   );
 }
