@@ -1,0 +1,19 @@
+{
+  "name": "@voxflow/zernio",
+  "version": "0.1.0",
+  "description": "Typed client for the Zernio telephony API (numbers, calls, agent assignment).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "globalPrompt": "You are Ana, a warm, concise voice receptionist for {{business}}. Speak in short, natural sentences. Never invent information.",
+  "variables": { "business": "Acme Clinic" },
+  "models": {
+    "stt": { "provider": "deepgram", "model": "nova-3" },
+    "llm": { "provider": "openai", "model": "gpt-4o-mini" },
+    "tts": { "provider": "elevenlabs", "model": "eleven_turbo_v2_5", "voice": "Rachel" }
+  },
+  "nodes": [
+    { "id": "start", "kind": "start", "name": "Start", "greeting": "Hi, thanks for calling {{business}}! How can I help?" },
+    { "id": "triage", "kind": "conversation", "name": "Triage", "prompt": "Find out whether the caller wants to book, reschedule, or ask a question. Ask one question at a time." },
+    { "id": "booking", "kind": "conversation", "name": "Booking", "prompt": "Collect the caller's full name and preferred day, then confirm the appointment back to them." },
+    { "id": "end", "kind": "end", "name": "End", "farewell": "Great, you're all set. Have a lovely day!" }
+  ],
+  "edges": [
+    { "id": "e_start", "from": "start", "to": "triage", "condition": "" },
+    { "id": "e_book", "from": "triage", "to": "booking", "condition": "the caller wants to book or reschedule an appointment" },
+    { "id": "e_done", "from": "booking", "to": "end", "condition": "the appointment has been confirmed back to the caller" }
+  ]
+}

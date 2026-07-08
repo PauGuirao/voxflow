@@ -1,0 +1,22 @@
+{
+  "name": "@voxflow/agent",
+  "version": "0.1.0",
+  "description": "Voxflow agent runtime: a wss:// media server Zernio streams live calls to.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --env-file-if-exists=.env src/index.ts",
+    "start": "node --experimental-strip-types --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@voxflow/flow": "workspace:*",
+    "@voxflow/zernio": "workspace:*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.3"
+  }
+}
