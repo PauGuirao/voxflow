@@ -4,6 +4,8 @@ import type { Providers } from "./providers/types.ts";
 export interface CallSession {
   /** Feed one inbound audio frame (raw mulaw 8kHz). */
   pushAudio(mulaw: Buffer): void;
+  /** The conversation so far (for the call log on hangup). */
+  transcript(): Turn[];
   stop(): void;
 }
 
@@ -145,6 +147,7 @@ export function startCallSession(opts: {
 
   return {
     pushAudio: (mulaw) => stt.push(mulaw),
+    transcript: () => history,
     stop: () => stt.close(),
   };
 }

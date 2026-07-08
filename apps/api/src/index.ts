@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ZernioClient, type Channel } from "@voxflow/zernio";
+import { addCallLog, type CallLog, listCallLogs } from "./call-logs.ts";
 import { getProviderKeys, type ProviderKeys, providerStatus, setProviderKeys } from "./settings.ts";
 import { createAgent, deleteAgent, getAgent, listAgents, publishAgent, saveAgent } from "./store.ts";
 
@@ -96,6 +97,24 @@ const server = createServer(async (req, res) => {
     // the host; the studio never calls it (it uses the masked /api/settings).
     if (method === "GET" && path === "/api/provider-keys") {
       return send(res, 200, { keys: await getProviderKeys() });
+    }
+
+    // --- Call logs (runtime posts one per hangup; studio Calls view reads them) ---
+    if (path === "/api/call-logs") {
+      if (method === "GET") return send(res, 200, { logs: await listCallLogs() });
+      if (method === "POST") {
+        const b = await readJson<Partial<Omit<CallLog, "id" | "createdAt">>>(req);
+        const log = await addCallLog({
+          agentId: String(b.agentId ?? "unknown"),
+          from: String(b.from ?? "caller"),
+          to: String(b.to ?? ""),
+          direction: b.direction === "outbound" ? "outbound" : "inbound",
+          durationSeconds: Number(b.durationSeconds ?? 0),
+          cost: b.cost ?? { stt: 0, llm: 0, tts: 0, total: 0 },
+          transcript: Array.isArray(b.transcript) ? b.transcript : [],
+        });
+        return send(res, 200, { log });
+      }
     }
 
     // --- Zernio proxy (requires the user's key) ---

@@ -221,7 +221,7 @@ export function App() {
               </Button>
             </>
           ) : (
-            (view === "numbers" || view === "calls") &&
+            view === "numbers" &&
             connected && (
               <Button
                 variant="outline"
@@ -280,7 +280,7 @@ export function App() {
           )}
           {view === "numbers" &&
             (connected ? <NumbersPanel agentId={agentId} /> : <ConnectCard onConnect={() => setConnected(true)} />)}
-          {view === "calls" && (connected ? <CallsPanel /> : <ConnectCard onConnect={() => setConnected(true)} />)}
+          {view === "calls" && <CallsPanel agentNames={new Map(agents.map((a) => [a.id, a.name]))} />}
           {view === "settings" && <SettingsPanel />}
         </div>
       </main>

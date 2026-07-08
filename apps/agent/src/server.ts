@@ -1,7 +1,11 @@
+import type { Flow } from "@voxflow/flow";
 import { WebSocketServer } from "ws";
+import { estimateCost } from "./costs.ts";
 import { loadFlow } from "./flow-store.ts";
 import { buildProviders } from "./providers/index.ts";
 import { startCallSession, type CallSession } from "./session.ts";
+
+const API_BASE = process.env.VOXFLOW_API_BASE ?? "http://localhost:8788";
 
 /**
  * Telnyx media-streaming frames (the shape Zernio's bridge speaks over the
@@ -10,14 +14,15 @@ import { startCallSession, type CallSession } from "./session.ts";
 interface MediaMessage {
   event?: string;
   stream_id?: string;
-  start?: { stream_id?: string };
+  start?: { stream_id?: string; from?: string; to?: string };
   media?: { payload?: string; track?: string };
 }
 
 /**
  * The wss:// endpoint a Zernio number's `forwardTo` points at. Each inbound
  * connection is one call; `?agentId=` selects the flow. On `start` we open a
- * CallSession; `media` frames feed STT; `stop`/close tears down.
+ * CallSession; `media` frames feed STT; on hangup we log the call (transcript +
+ * estimated cost) to the API so it shows up in the studio.
  */
 export function startServer(opts: { port: number }): WebSocketServer {
   const wss = new WebSocketServer({ port: opts.port });
@@ -27,6 +32,11 @@ export function startServer(opts: { port: number }): WebSocketServer {
     const agentId = url.searchParams.get("agentId") ?? "sample";
     let streamId = "";
     let session: CallSession | null = null;
+    let models: Flow["models"] | null = null;
+    let startedAt = 0;
+    let from = "caller";
+    let to = agentId;
+    let logged = false;
 
     const sendFrame = (payload: string): void => {
       if (ws.readyState === ws.OPEN) {
@@ -42,6 +52,23 @@ export function startServer(opts: { port: number }): WebSocketServer {
       }
     };
 
+    const finalize = async (): Promise<void> => {
+      if (logged || !session || !models || !startedAt) return;
+      logged = true;
+      const durationSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      const transcript = session.transcript().map((t) => ({ role: t.role, text: t.text }));
+      const cost = estimateCost(models, durationSeconds);
+      try {
+        await fetch(`${API_BASE}/api/call-logs`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ agentId, from, to, direction: "inbound", durationSeconds, cost, transcript }),
+        });
+      } catch {
+        // API down — call log dropped
+      }
+    };
+
     ws.on("message", async (raw) => {
       let msg: MediaMessage;
       try {
@@ -53,7 +80,11 @@ export function startServer(opts: { port: number }): WebSocketServer {
       switch (msg.event) {
         case "start": {
           streamId = msg.stream_id ?? msg.start?.stream_id ?? "";
+          from = msg.start?.from ?? "caller";
+          to = msg.start?.to ?? agentId;
+          startedAt = Date.now();
           const flow = await loadFlow(agentId);
+          models = flow.models;
           session = startCallSession({
             flow,
             providers: await buildProviders(flow.models),
@@ -73,6 +104,7 @@ export function startServer(opts: { port: number }): WebSocketServer {
           break;
         }
         case "stop": {
+          await finalize();
           session?.stop();
           session = null;
           break;
@@ -81,6 +113,7 @@ export function startServer(opts: { port: number }): WebSocketServer {
     });
 
     ws.on("close", () => {
+      void finalize();
       session?.stop();
       session = null;
       console.log(`[agent] call ended agent=${agentId}`);
