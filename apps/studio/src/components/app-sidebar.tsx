@@ -1,15 +1,16 @@
-import { AudioLines, Bot, PhoneCall, Phone, Plus, Trash2, Workflow, type LucideIcon } from "lucide-react";
+import { AudioLines, Bot, PhoneCall, Phone, Plus, SlidersHorizontal, Trash2, Workflow, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import type { AgentSummary } from "@/agents/api";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-export type NavKey = "builder" | "numbers" | "calls";
+export type NavKey = "builder" | "numbers" | "calls" | "settings";
 
 const nav: { key: NavKey; label: string; icon: LucideIcon }[] = [
   { key: "builder", label: "Builder", icon: Workflow },
   { key: "numbers", label: "Numbers", icon: Phone },
   { key: "calls", label: "Calls", icon: PhoneCall },
+  { key: "settings", label: "Settings", icon: SlidersHorizontal },
 ];
 
 export function AppSidebar(props: {

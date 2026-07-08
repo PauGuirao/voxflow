@@ -48,7 +48,7 @@ export function startServer(opts: { port: number }): WebSocketServer {
           const flow = await loadFlow(agentId);
           session = startCallSession({
             flow,
-            providers: buildProviders(flow.models),
+            providers: await buildProviders(flow.models),
             sendFrame,
             hangup: () => ws.close(),
           });

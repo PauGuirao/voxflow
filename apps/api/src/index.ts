@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ZernioClient, type Channel } from "@voxflow/zernio";
+import { getProviderKeys, type ProviderKeys, providerStatus, setProviderKeys } from "./settings.ts";
 import { createAgent, deleteAgent, getAgent, listAgents, saveAgent } from "./store.ts";
 
 const PORT = Number(process.env.API_PORT ?? 8788);
@@ -78,6 +79,20 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // --- Provider keys (speech providers configured in the studio Settings) ---
+    if (path === "/api/settings") {
+      if (method === "GET") return send(res, 200, { providers: await providerStatus() });
+      if (method === "PUT") {
+        await setProviderKeys(await readJson<ProviderKeys>(req));
+        return send(res, 200, { providers: await providerStatus() });
+      }
+    }
+    // Raw keys for the RUNTIME. The server binds to localhost, so this stays on
+    // the host; the studio never calls it (it uses the masked /api/settings).
+    if (method === "GET" && path === "/api/provider-keys") {
+      return send(res, 200, { keys: await getProviderKeys() });
+    }
+
     // --- Zernio proxy (requires the user's key) ---
     const key = req.headers["x-zernio-key"];
     if (typeof key !== "string" || !key) return send(res, 401, { error: "Missing x-zernio-key header" });
@@ -111,6 +126,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+// Bind to localhost only: the store holds provider secrets, so it shouldn't be
+// reachable off-host. Studio + runtime both run locally and reach 127.0.0.1.
+server.listen(PORT, "127.0.0.1", () => {
   console.log(`[api] Voxflow proxy on http://localhost:${PORT} (agent wss=${AGENT_WSS}, zernio=${ZERNIO_BASE})`);
 });

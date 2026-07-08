@@ -15,6 +15,7 @@ import { Canvas } from "./flow/Canvas";
 import { flowToGraph, graphToFlow, type FlowMeta, type Selection, type VoxEdge, type VoxNode } from "./flow/model";
 import { SidePanel } from "./flow/SidePanel";
 import { sampleFlow } from "./sampleFlow";
+import { SettingsPanel } from "./settings/SettingsPanel";
 import { clearKey, getKey } from "./zernio/api";
 import { CallsPanel } from "./zernio/CallsPanel";
 import { ConnectCard } from "./zernio/ConnectCard";
@@ -132,7 +133,7 @@ export function App() {
 
   const selNode = selection.kind === "node" ? nodes.find((n) => n.id === selection.id) : undefined;
   const selEdge = selection.kind === "edge" ? edges.find((e) => e.id === selection.id) : undefined;
-  const title = view === "builder" ? activeName : view === "numbers" ? "Numbers" : "Calls";
+  const title = view === "builder" ? activeName : view === "numbers" ? "Numbers" : view === "calls" ? "Calls" : "Settings";
   const agentId = activeId ?? "sample";
 
   return (
@@ -177,6 +178,7 @@ export function App() {
               </Button>
             </>
           ) : (
+            (view === "numbers" || view === "calls") &&
             connected && (
               <Button
                 variant="outline"
@@ -226,6 +228,7 @@ export function App() {
           {view === "numbers" &&
             (connected ? <NumbersPanel agentId={agentId} /> : <ConnectCard onConnect={() => setConnected(true)} />)}
           {view === "calls" && (connected ? <CallsPanel /> : <ConnectCard onConnect={() => setConnected(true)} />)}
+          {view === "settings" && <SettingsPanel />}
         </div>
       </main>
     </div>
