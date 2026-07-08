@@ -36,6 +36,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@voxflow/flow':
+        specifier: workspace:*
+        version: link:../../packages/flow
       '@voxflow/zernio':
         specifier: workspace:*
         version: link:../../packages/zernio

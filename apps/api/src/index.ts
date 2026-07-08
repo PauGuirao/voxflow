@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ZernioClient, type Channel } from "@voxflow/zernio";
+import { createAgent, deleteAgent, getAgent, listAgents, saveAgent } from "./store.ts";
 
 const PORT = Number(process.env.API_PORT ?? 8788);
 const AGENT_WSS = process.env.AGENT_PUBLIC_WSS_URL ?? "ws://localhost:8787";
@@ -16,7 +17,7 @@ interface AssignBody {
 function cors(res: ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "content-type, x-zernio-key");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -26,11 +27,11 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-async function readJson(req: IncomingMessage): Promise<AssignBody> {
+async function readJson<T>(req: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
   const raw = Buffer.concat(chunks).toString("utf8");
-  return raw ? (JSON.parse(raw) as AssignBody) : {};
+  return (raw ? JSON.parse(raw) : {}) as T;
 }
 
 const server = createServer(async (req, res) => {
@@ -42,21 +43,54 @@ const server = createServer(async (req, res) => {
   }
 
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
-  const key = req.headers["x-zernio-key"];
-  if (typeof key !== "string" || !key) {
-    return send(res, 401, { error: "Missing x-zernio-key header" });
-  }
-  const zernio = new ZernioClient({ apiKey: key, baseUrl: ZERNIO_BASE });
+  const path = url.pathname;
+  const method = req.method ?? "GET";
 
   try {
-    if (req.method === "GET" && url.pathname === "/api/phone-numbers") {
+    // --- Agent store (local data, no Zernio key required) ---
+    if (path === "/api/agents") {
+      if (method === "GET") return send(res, 200, { agents: await listAgents() });
+      if (method === "POST") {
+        const body = await readJson<{ name?: string }>(req);
+        if (!body.name?.trim()) return send(res, 400, { error: "name is required" });
+        return send(res, 200, { agent: await createAgent(body.name.trim()) });
+      }
+    }
+    const agentMatch = path.match(/^\/api\/agents\/([^/]+)$/);
+    if (agentMatch) {
+      const id = decodeURIComponent(agentMatch[1]!);
+      if (method === "GET") {
+        const a = await getAgent(id);
+        return a ? send(res, 200, { agent: a }) : send(res, 404, { error: "Agent not found" });
+      }
+      if (method === "PUT") {
+        const body = await readJson<{ name?: string; flow?: unknown }>(req);
+        if (!body.flow) return send(res, 400, { error: "flow is required" });
+        try {
+          const a = await saveAgent(id, { name: body.name, flow: body.flow });
+          return a ? send(res, 200, { agent: a }) : send(res, 404, { error: "Agent not found" });
+        } catch (e) {
+          return send(res, 400, { error: e instanceof Error ? e.message : "Invalid flow" });
+        }
+      }
+      if (method === "DELETE") {
+        return (await deleteAgent(id)) ? send(res, 200, { ok: true }) : send(res, 404, { error: "Agent not found" });
+      }
+    }
+
+    // --- Zernio proxy (requires the user's key) ---
+    const key = req.headers["x-zernio-key"];
+    if (typeof key !== "string" || !key) return send(res, 401, { error: "Missing x-zernio-key header" });
+    const zernio = new ZernioClient({ apiKey: key, baseUrl: ZERNIO_BASE });
+
+    if (method === "GET" && path === "/api/phone-numbers") {
       return send(res, 200, { phoneNumbers: await zernio.listPhoneNumbers() });
     }
-    if (req.method === "GET" && url.pathname === "/api/calls") {
+    if (method === "GET" && path === "/api/calls") {
       return send(res, 200, { calls: await zernio.listCalls({ limit: 50 }) });
     }
-    if (req.method === "POST" && url.pathname === "/api/assign") {
-      const body = await readJson(req);
+    if (method === "POST" && path === "/api/assign") {
+      const body = await readJson<AssignBody>(req);
       if (!body.phoneNumberId || !body.accountId || !body.agentId || !body.channel) {
         return send(res, 400, { error: "phoneNumberId, accountId, agentId and channel are required" });
       }
@@ -70,9 +104,10 @@ const server = createServer(async (req, res) => {
       });
       return send(res, 200, { ok: true });
     }
+
     return send(res, 404, { error: "Not found" });
   } catch (err) {
-    return send(res, 502, { error: err instanceof Error ? err.message : "Zernio request failed" });
+    return send(res, 502, { error: err instanceof Error ? err.message : "Request failed" });
   }
 });
 

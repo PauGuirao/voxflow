@@ -5,20 +5,29 @@ import { parseFlow, type Flow } from "@voxflow/flow";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const flowsDir = join(here, "..", "flows");
+const API_BASE = process.env.VOXFLOW_API_BASE ?? "http://localhost:8788";
 
 /**
- * Load the flow for an agent. The skeleton reads `flows/<agentId>.json` (with a
- * `sample.json` fallback); wire this to the studio's API/DB to serve published
- * agent versions instead.
+ * Load the flow for an agent. Prefers the agent store (what the studio edits, via
+ * @voxflow/api); falls back to bundled `flows/<agentId>.json` when the API is
+ * unreachable so a call still connects offline.
  */
 export async function loadFlow(agentId: string): Promise<Flow> {
+  try {
+    const res = await fetch(`${API_BASE}/api/agents/${encodeURIComponent(agentId)}`, { cache: "no-store" });
+    if (res.ok) {
+      const { agent } = (await res.json()) as { agent?: { flow?: unknown } };
+      if (agent?.flow) return parseFlow(agent.flow);
+    }
+  } catch {
+    // API down — fall back to bundled flows below
+  }
   for (const name of [`${agentId}.json`, "sample.json"]) {
     try {
-      const raw = await readFile(join(flowsDir, name), "utf8");
-      return parseFlow(JSON.parse(raw));
+      return parseFlow(JSON.parse(await readFile(join(flowsDir, name), "utf8")));
     } catch {
-      // try the next candidate
+      // try next
     }
   }
-  throw new Error(`No flow found for agent "${agentId}" and no sample.json fallback`);
+  throw new Error(`No flow found for agent "${agentId}"`);
 }
