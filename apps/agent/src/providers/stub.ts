@@ -4,12 +4,9 @@ import type { LlmProvider, Providers, SttProvider, TtsProvider } from "./types.t
 /**
  * Zero-dependency stubs so `pnpm dev:agent` boots with no API keys and the
  * Telnyx <-> flow wiring can be exercised end to end. They do NOT do real
- * speech — swap in Deepgram / OpenAI / ElevenLabs for that. Kept deliberately
- * simple and obvious.
+ * speech — swap in Deepgram / OpenAI / ElevenLabs for that.
  */
 
-// STT stub: real transcription needs a provider, so this only logs frame volume.
-// A real SttProvider streams the mulaw to Deepgram and calls onFinal per utterance.
 const stubStt: SttProvider = {
   open() {
     let frames = 0;
@@ -24,13 +21,13 @@ const stubStt: SttProvider = {
   },
 };
 
-// LLM stub: echoes the active node's guidance and picks the first edge whose
-// condition keyword appears in the last user turn (else stays).
 const stubLlm: LlmProvider = {
-  async reply({ system, history }) {
+  async reply({ system, history, onDelta }) {
     const lastUser = [...history].reverse().find((t) => t.role === "user");
     const hint = system.split("\n").find(Boolean) ?? "Okay.";
-    return lastUser ? `(${hint}) I heard: "${lastUser.text}"` : hint;
+    const text = lastUser ? `(${hint}) I heard: "${lastUser.text}"` : hint;
+    onDelta?.(text);
+    return text;
   },
   async resolveTransition({ history, candidates }: { history: Turn[]; candidates: TransitionCandidate[] }) {
     const lastUser = ([...history].reverse().find((t) => t.role === "user")?.text ?? "").toLowerCase();
@@ -41,9 +38,9 @@ const stubLlm: LlmProvider = {
   },
 };
 
-// TTS stub: emits a single 20ms mulaw silence frame so the send path is real.
 const stubTts: TtsProvider = {
-  async synthesize({ text, onFrame }) {
+  async synthesize({ text, onFrame, signal }) {
+    if (signal?.aborted) return;
     console.log(`[tts:stub] would speak: ${text}`);
     onFrame(Buffer.alloc(160, 0xff).toString("base64")); // 20ms @ 8kHz mulaw silence
   },

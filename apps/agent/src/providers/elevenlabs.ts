@@ -1,7 +1,7 @@
 import type { TtsProvider } from "./types.ts";
 
-// A few common ElevenLabs voices by name → id, so a flow can say "Rachel" instead
-// of a raw id. Unknown names that look like ids pass through; otherwise default.
+// Common ElevenLabs voices by name → id, so a flow can say "Rachel" instead of a
+// raw id. Names that look like ids pass through; otherwise default to Rachel.
 const VOICE_IDS: Record<string, string> = {
   Rachel: "21m00Tcm4TlvDq8ikWAM",
   Adam: "pNInz6obpgDQGcFmaJgB",
@@ -16,13 +16,14 @@ function resolveVoiceId(voice: string): string {
 }
 
 /**
- * ElevenLabs streaming TTS. We request `output_format=ulaw_8000` so the bytes
- * come back already in Telnyx's wire format (mulaw 8kHz) — no transcoding. The
- * stream is re-chunked into 160-byte (20ms) frames the media socket expects.
+ * ElevenLabs streaming TTS. `output_format=ulaw_8000` returns Telnyx's wire format
+ * directly (mulaw 8kHz) — no transcoding — re-chunked into 160-byte (20ms) frames.
+ * The AbortSignal lets barge-in stop synthesis + the request mid-stream.
  */
 export function elevenLabsTts(apiKey: string, model: string): TtsProvider {
   return {
-    async synthesize({ text, voice, onFrame }) {
+    async synthesize({ text, voice, onFrame, signal }) {
+      if (signal?.aborted) return;
       const voiceId = resolveVoiceId(voice);
       const res = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=ulaw_8000`,
@@ -30,6 +31,7 @@ export function elevenLabsTts(apiKey: string, model: string): TtsProvider {
           method: "POST",
           headers: { "xi-api-key": apiKey, "content-type": "application/json" },
           body: JSON.stringify({ text, model_id: model }),
+          signal,
         },
       );
       if (!res.ok || !res.body) throw new Error(`ElevenLabs ${res.status}: ${await res.text().catch(() => "")}`);
@@ -37,15 +39,20 @@ export function elevenLabsTts(apiKey: string, model: string): TtsProvider {
       const reader = res.body.getReader();
       let buf = Buffer.alloc(0);
       for (;;) {
+        if (signal?.aborted) {
+          await reader.cancel().catch(() => {});
+          return;
+        }
         const { done, value } = await reader.read();
         if (done) break;
         buf = Buffer.concat([buf, Buffer.from(value)]);
         while (buf.length >= 160) {
+          if (signal?.aborted) return;
           onFrame(buf.subarray(0, 160).toString("base64"));
           buf = buf.subarray(160);
         }
       }
-      if (buf.length) onFrame(buf.toString("base64"));
+      if (buf.length && !signal?.aborted) onFrame(buf.toString("base64"));
     },
   };
 }

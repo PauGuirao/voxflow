@@ -4,34 +4,23 @@ interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
-interface ChatResponse {
-  choices?: { message?: { content?: string } }[];
-}
 
 /**
- * OpenAI chat completions for both legs of the reasoning: generating the agent's
- * spoken reply, and routing (which transition the conversation now satisfies).
- * Routing runs at temperature 0 and asks for just an index to keep it crisp.
+ * OpenAI chat completions. `reply` STREAMS tokens (onDelta) so the session can
+ * start speaking the first sentence while the rest is still generating; routing
+ * (`resolveTransition`) is a quick, non-streamed classification at temperature 0.
  */
 export function openaiLlm(apiKey: string, model: string): LlmProvider {
-  const chat = async (messages: ChatMessage[], opts?: { temperature?: number; maxTokens?: number }): Promise<string> => {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const post = (body: unknown, signal?: AbortSignal) =>
+    fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: opts?.temperature ?? 0.6,
-        max_tokens: opts?.maxTokens ?? 160,
-      }),
+      body: JSON.stringify(body),
+      signal,
     });
-    if (!res.ok) throw new Error(`OpenAI ${res.status}: ${await res.text()}`);
-    const json = (await res.json()) as ChatResponse;
-    return json.choices?.[0]?.message?.content ?? "";
-  };
 
   return {
-    async reply({ system, history }) {
+    async reply({ system, history, onDelta, signal }) {
       const messages: ChatMessage[] = [
         { role: "system", content: system },
         ...history.map((t) => ({ role: t.role, content: t.text }) satisfies ChatMessage),
@@ -39,7 +28,38 @@ export function openaiLlm(apiKey: string, model: string): LlmProvider {
       if (!history.some((t) => t.role === "user")) {
         messages.push({ role: "user", content: "The call just connected. Say your opening line now." });
       }
-      return (await chat(messages)).trim();
+
+      const res = await post({ model, messages, temperature: 0.6, max_tokens: 200, stream: true }, signal);
+      if (!res.ok || !res.body) throw new Error(`OpenAI ${res.status}: ${await res.text().catch(() => "")}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let full = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith("data:")) continue;
+          const data = t.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const delta = (JSON.parse(data) as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta
+              ?.content;
+            if (delta) {
+              full += delta;
+              onDelta?.(delta);
+            }
+          } catch {
+            // partial JSON across chunks — ignore
+          }
+        }
+      }
+      return full.trim();
     },
 
     async resolveTransition({ history, candidates }) {
@@ -51,8 +71,11 @@ export function openaiLlm(apiKey: string, model: string): LlmProvider {
         .slice(-8)
         .map((t) => `${t.role}: ${t.text}`)
         .join("\n");
-      const out = await chat(
-        [
+      const res = await post({
+        model,
+        temperature: 0,
+        max_tokens: 5,
+        messages: [
           {
             role: "system",
             content:
@@ -60,9 +83,10 @@ export function openaiLlm(apiKey: string, model: string): LlmProvider {
           },
           { role: "user", content: `Transcript:\n${transcript}\n\nTransitions:\n${list}\n\nNumber:` },
         ],
-        { temperature: 0, maxTokens: 5 },
-      );
-      const idx = Number.parseInt(out.match(/-?\d+/)?.[0] ?? "-1", 10);
+      });
+      if (!res.ok) return null;
+      const out = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const idx = Number.parseInt(out.choices?.[0]?.message?.content?.match(/-?\d+/)?.[0] ?? "-1", 10);
       return candidates[idx]?.edgeId ?? null;
     },
   };

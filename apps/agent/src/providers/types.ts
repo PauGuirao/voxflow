@@ -1,14 +1,17 @@
 import type { TransitionResolver, Turn } from "@voxflow/flow";
 
 /**
- * The three swappable speech legs. Real implementations (Deepgram, OpenAI/
- * Anthropic, ElevenLabs) implement these; the stubs let the runtime boot with
- * no API keys so you can wire telephony first and add voice providers after.
+ * The three swappable speech legs. Real implementations (Deepgram, OpenAI,
+ * ElevenLabs) implement these; the stubs let the runtime boot with no keys.
+ *
+ * Two hooks make the conversation feel human:
+ *  - STT `onSpeechStarted` fires the moment the caller starts talking → barge-in.
+ *  - LLM `reply` streams tokens via `onDelta` and both reply + TTS take an
+ *    `AbortSignal` so an interruption cancels them mid-flight.
  */
 
-/** Streaming speech-to-text over the caller's audio (mulaw 8kHz frames). */
 export interface SttProvider {
-  open(handlers: { onFinal: (text: string) => void }): SttStream;
+  open(handlers: { onFinal: (text: string) => void; onSpeechStarted?: () => void }): SttStream;
 }
 export interface SttStream {
   /** Feed one inbound audio frame (raw mulaw 8kHz bytes). */
@@ -16,15 +19,27 @@ export interface SttStream {
   close(): void;
 }
 
-/** The reasoning leg: reply generation + which transition the graph should take. */
+export interface LlmReplyInput {
+  system: string;
+  history: Turn[];
+  /** Called with each token chunk as it streams in. */
+  onDelta?: (chunk: string) => void;
+  signal?: AbortSignal;
+}
 export interface LlmProvider {
-  reply(input: { system: string; history: Turn[] }): Promise<string>;
+  /** Generate the agent's reply, streaming via onDelta; resolves with full text. */
+  reply(input: LlmReplyInput): Promise<string>;
   resolveTransition: TransitionResolver;
 }
 
-/** Text-to-speech → outbound audio, emitted as base64 mulaw 8kHz frames. */
+export interface TtsInput {
+  text: string;
+  voice: string;
+  onFrame: (mulawB64: string) => void;
+  signal?: AbortSignal;
+}
 export interface TtsProvider {
-  synthesize(input: { text: string; voice: string; onFrame: (mulawB64: string) => void }): Promise<void>;
+  synthesize(input: TtsInput): Promise<void>;
 }
 
 export interface Providers {

@@ -8,59 +8,139 @@ export interface CallSession {
 }
 
 /**
- * One live call. Wires the flow state machine to the speech providers:
+ * One live call. Wires the flow state machine to the speech providers, with two
+ * things that make it feel human:
  *
- *   caller audio ─▶ STT ─▶ (append user turn) ─▶ flow.advance()
- *                                                     │
- *                          reply for the active node ◀┘ ─▶ TTS ─▶ caller
- *
- * On reaching an `end` node it speaks the farewell and asks the transport to
- * hang up. Barge-in/interruption is intentionally left to a later pass.
+ *  - Streaming: the LLM reply streams token-by-token; complete sentences are
+ *    sent to TTS as they land (chained so audio stays ordered), so the agent
+ *    starts talking ~1 sentence in instead of after the whole reply.
+ *  - Barge-in: when Deepgram reports the caller started speaking while the agent
+ *    is talking, we abort the in-flight LLM + TTS and flush the caller's buffered
+ *    audio (Telnyx `clear`), so the agent shuts up instantly.
  */
 export function startCallSession(opts: {
   flow: Flow;
   providers: Providers;
   variables?: Record<string, string>;
   sendFrame: (mulawB64: string) => void;
+  clearAudio: () => void;
   hangup: () => void;
 }): CallSession {
-  const { flow, providers, sendFrame, hangup } = opts;
+  const { flow, providers, sendFrame, clearAudio, hangup } = opts;
   const session = new FlowSession(flow, { variables: opts.variables });
   const history: Turn[] = [];
+  const voice = flow.models.tts.voice;
 
-  const speak = async (text: string): Promise<void> => {
-    if (!text.trim()) return;
-    history.push({ role: "assistant", text });
-    await providers.tts.synthesize({ text, voice: flow.models.tts.voice, onFrame: sendFrame });
+  let speaking = false;
+  let ac: AbortController | null = null;
+
+  /** Stop whatever the agent is currently saying and flush queued audio. */
+  const bargeIn = (): void => {
+    if (!speaking) return;
+    ac?.abort();
+    clearAudio();
+    speaking = false;
   };
 
-  const onFinal = async (userText: string): Promise<void> => {
-    if (!userText.trim()) return;
-    history.push({ role: "user", text: userText });
+  /** Speak a fixed string (greeting / farewell) — abortable, ordered. */
+  const speakText = async (text: string): Promise<void> => {
+    if (!text.trim()) return;
+    const controller = new AbortController();
+    ac = controller;
+    speaking = true;
+    history.push({ role: "assistant", text });
+    try {
+      await providers.tts.synthesize({
+        text,
+        voice,
+        onFrame: (f) => !controller.signal.aborted && sendFrame(f),
+        signal: controller.signal,
+      });
+    } catch {
+      // aborted / provider error
+    }
+    if (ac === controller) speaking = false;
+  };
 
+  /** Generate + speak a reply, streaming sentence-by-sentence. */
+  const respond = async (): Promise<void> => {
+    bargeIn();
+    const controller = new AbortController();
+    ac = controller;
+    const signal = controller.signal;
+    speaking = true;
+
+    let tail = Promise.resolve();
+    const speak = (sentence: string): void => {
+      tail = tail.then(async () => {
+        if (signal.aborted || !sentence.trim()) return;
+        try {
+          await providers.tts.synthesize({
+            text: sentence,
+            voice,
+            onFrame: (f) => !signal.aborted && sendFrame(f),
+            signal,
+          });
+        } catch {
+          // aborted / provider error
+        }
+      });
+    };
+
+    let buffer = "";
+    let full = "";
+    try {
+      full = await providers.llm.reply({
+        system: session.systemPrompt(),
+        history,
+        signal,
+        onDelta: (chunk) => {
+          buffer += chunk;
+          // Emit each complete sentence as soon as punctuation + whitespace lands.
+          let m: RegExpMatchArray | null;
+          while ((m = buffer.match(/^([\s\S]+?[.!?…]+)\s+/)) !== null) {
+            speak(m[1]!.trim());
+            buffer = buffer.slice(m[0].length);
+          }
+        },
+      });
+    } catch {
+      // aborted / error
+    }
+    if (buffer.trim()) speak(buffer.trim());
+    await tail;
+
+    if (!signal.aborted) history.push({ role: "assistant", text: full });
+    if (ac === controller) speaking = false;
+  };
+
+  const onFinal = async (text: string): Promise<void> => {
+    if (!text.trim()) return;
+    bargeIn();
+    history.push({ role: "user", text });
     const result = await session.advance({ history, resolveTransition: providers.llm.resolveTransition });
     if (result.ended) {
-      const bye = session.farewell();
-      if (bye) await speak(bye);
+      await speakText(session.farewell());
       hangup();
       return;
     }
-    const reply = await providers.llm.reply({ system: session.systemPrompt(), history });
-    await speak(reply);
+    await respond();
   };
 
-  const stt = providers.stt.open({ onFinal: (t) => void onFinal(t) });
+  const stt = providers.stt.open({
+    onFinal: (t) => void onFinal(t),
+    onSpeechStarted: () => bargeIn(),
+  });
 
-  // Kick off the call: greeting, then the opening line for the first node.
+  // Kick off: greeting, then the opening line for the first node.
   void (async () => {
     const { greeting } = session.begin();
-    if (greeting) await speak(greeting);
+    if (greeting) await speakText(greeting);
     if (session.isEnded) {
       hangup();
       return;
     }
-    const opener = await providers.llm.reply({ system: session.systemPrompt(), history });
-    await speak(opener);
+    await respond();
   })();
 
   return {

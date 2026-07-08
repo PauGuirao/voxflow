@@ -59,6 +59,7 @@ export function startVoiceTest(opts: {
   const ctx = new AudioContext({ sampleRate: 8000 });
   const ws = new WebSocket(opts.wsUrl);
   let playHead = ctx.currentTime;
+  let scheduled: AudioBufferSourceNode[] = [];
   let processor: ScriptProcessorNode | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let stream: MediaStream | null = null;
@@ -84,6 +85,7 @@ export function startVoiceTest(opts: {
       return;
     }
     if (msg.event === "media" && msg.media?.payload) playFrame(msg.media.payload);
+    if (msg.event === "clear") clearPlayback(); // barge-in: agent audio cut off
   };
 
   async function startMic(): Promise<void> {
@@ -127,6 +129,22 @@ export function startVoiceTest(opts: {
     playHead = Math.max(playHead, ctx.currentTime);
     src.start(playHead);
     playHead += buffer.duration;
+    scheduled.push(src);
+    src.onended = () => {
+      scheduled = scheduled.filter((s) => s !== src);
+    };
+  }
+
+  function clearPlayback(): void {
+    for (const s of scheduled) {
+      try {
+        s.stop();
+      } catch {
+        // already stopped
+      }
+    }
+    scheduled = [];
+    playHead = ctx.currentTime;
   }
 
   function cleanup(): void {

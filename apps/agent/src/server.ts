@@ -34,6 +34,14 @@ export function startServer(opts: { port: number }): WebSocketServer {
       }
     };
 
+    // Barge-in: flush any audio we've buffered on the far side so the agent goes
+    // silent the instant the caller starts talking.
+    const clearAudio = (): void => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ event: "clear", stream_id: streamId }));
+      }
+    };
+
     ws.on("message", async (raw) => {
       let msg: MediaMessage;
       try {
@@ -50,6 +58,7 @@ export function startServer(opts: { port: number }): WebSocketServer {
             flow,
             providers: await buildProviders(flow.models),
             sendFrame,
+            clearAudio,
             hangup: () => ws.close(),
           });
           console.log(`[agent] call started agent=${agentId} stream=${streamId}`);
