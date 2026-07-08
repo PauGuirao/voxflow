@@ -1,3 +1,4 @@
+import Dagre from "@dagrejs/dagre";
 import type { Edge, Node } from "@xyflow/react";
 import { parseFlow, type Flow, type FlowNode } from "@voxflow/flow";
 
@@ -21,40 +22,33 @@ export type Selection =
   | { kind: "edge"; id: string }
   | { kind: "global" };
 
+const NODE_W = 240;
+const NODE_H = 96;
+
+/** Position nodes with dagre (left-to-right) so any graph reads cleanly. */
+export function tidyLayout(nodes: VoxNode[], edges: VoxEdge[]): VoxNode[] {
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "LR", nodesep: 48, ranksep: 90, marginx: 24, marginy: 24 });
+  for (const n of nodes) g.setNode(n.id, { width: NODE_W, height: NODE_H });
+  for (const e of edges) g.setEdge(e.source, e.target);
+  Dagre.layout(g);
+  return nodes.map((n) => {
+    const p = g.node(n.id);
+    return { ...n, position: { x: p.x - NODE_W / 2, y: p.y - NODE_H / 2 } };
+  });
+}
+
 const textOf = (n: FlowNode): string =>
   n.kind === "start" ? n.greeting : n.kind === "end" ? n.farewell : n.prompt;
 
 /** Flow (no coordinates) → a laid-out, editable React Flow graph. */
 export function flowToGraph(flow: Flow): { nodes: VoxNode[]; edges: VoxEdge[]; meta: FlowMeta } {
-  const depth = new Map<string, number>();
-  const start = flow.nodes.find((n) => n.kind === "start");
-  const queue: string[] = [];
-  if (start) {
-    depth.set(start.id, 0);
-    queue.push(start.id);
-  }
-  while (queue.length) {
-    const id = queue.shift()!;
-    const d = depth.get(id)!;
-    for (const e of flow.edges.filter((e) => e.from === id)) {
-      if (!depth.has(e.to)) {
-        depth.set(e.to, d + 1);
-        queue.push(e.to);
-      }
-    }
-  }
-  const rowAt = new Map<number, number>();
-  const nodes: VoxNode[] = flow.nodes.map((n) => {
-    const d = depth.get(n.id) ?? 0;
-    const row = rowAt.get(d) ?? 0;
-    rowAt.set(d, row + 1);
-    return {
-      id: n.id,
-      type: n.kind,
-      position: { x: d * 320, y: row * 170 },
-      data: { kind: n.kind, name: n.name, text: textOf(n) },
-    };
-  });
+  const nodes: VoxNode[] = flow.nodes.map((n) => ({
+    id: n.id,
+    type: n.kind,
+    position: { x: 0, y: 0 },
+    data: { kind: n.kind, name: n.name, text: textOf(n) },
+  }));
   const edges: VoxEdge[] = flow.edges.map((e) => ({
     id: e.id,
     source: e.from,
@@ -63,7 +57,11 @@ export function flowToGraph(flow: Flow): { nodes: VoxNode[]; edges: VoxEdge[]; m
     animated: Boolean(e.condition),
     data: { condition: e.condition },
   }));
-  return { nodes, edges, meta: { globalPrompt: flow.globalPrompt, variables: flow.variables, models: flow.models } };
+  return {
+    nodes: tidyLayout(nodes, edges),
+    edges,
+    meta: { globalPrompt: flow.globalPrompt, variables: flow.variables, models: flow.models },
+  };
 }
 
 /** Editable graph → a validated Flow (for export / handing to the runtime). */

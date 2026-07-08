@@ -1,5 +1,5 @@
 import { addEdge, useEdgesState, useNodesState, type Connection } from "@xyflow/react";
-import { Check, Download, Loader2, LogOut, PhoneCall, Plus, Save, Settings2 } from "lucide-react";
+import { Check, Download, LayoutGrid, Loader2, LogOut, PhoneCall, Plus, Save, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   type AgentSummary,
@@ -12,7 +12,7 @@ import {
 import { AppSidebar, type NavKey } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Canvas } from "./flow/Canvas";
-import { flowToGraph, graphToFlow, type FlowMeta, type Selection, type VoxEdge, type VoxNode } from "./flow/model";
+import { flowToGraph, graphToFlow, tidyLayout, type FlowMeta, type Selection, type VoxEdge, type VoxNode } from "./flow/model";
 import { SidePanel } from "./flow/SidePanel";
 import { sampleFlow } from "./sampleFlow";
 import { SettingsPanel } from "./settings/SettingsPanel";
@@ -161,6 +161,9 @@ export function App() {
             <>
               <Button variant="ghost" size="sm" onClick={addStep}>
                 <Plus className="size-4" /> Step
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setNodes((ns) => tidyLayout(ns, edges))}>
+                <LayoutGrid className="size-4" /> Tidy
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelection({ kind: "global" })}>
                 <Settings2 className="size-4" /> Global

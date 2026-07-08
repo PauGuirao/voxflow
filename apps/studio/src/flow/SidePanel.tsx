@@ -1,4 +1,5 @@
-import { Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,7 +40,7 @@ function ModelSelect({ value, options, onChange }: { value: string; options: rea
   );
 }
 
-function ModelLeg({ label, provider, children }: { label: string; provider: string; children: React.ReactNode }) {
+function ModelLeg({ label, provider, children }: { label: string; provider: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
@@ -65,6 +66,21 @@ export function SidePanel(props: {
   const { selection, meta } = props;
   const shell = "bg-card flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l p-4";
   const setModels = (patch: Partial<FlowMeta["models"]>) => props.onPatchMeta({ models: { ...meta.models, ...patch } });
+
+  const [newKey, setNewKey] = useState("");
+  const [newVal, setNewVal] = useState("");
+  const setVar = (k: string, v: string) => props.onPatchMeta({ variables: { ...meta.variables, [k]: v } });
+  const removeVar = (k: string) => {
+    const rest = { ...meta.variables };
+    delete rest[k];
+    props.onPatchMeta({ variables: rest });
+  };
+  const addVar = () => {
+    if (!newKey.trim()) return;
+    setVar(newKey.trim(), newVal);
+    setNewKey("");
+    setNewVal("");
+  };
 
   if (selection.kind === "node" && props.node) {
     const node = props.node;
@@ -131,6 +147,31 @@ export function SidePanel(props: {
           <Textarea className="min-h-40" value={meta.globalPrompt} onChange={(e) => props.onPatchMeta({ globalPrompt: e.target.value })} />
           <p className="text-muted-foreground text-xs">Prepended to every node prompt.</p>
         </div>
+
+        <Separator />
+        <div className="flex flex-col gap-2">
+          <Label>Variables</Label>
+          <p className="text-muted-foreground text-xs">
+            Referenced as <code className="bg-muted rounded px-1">{"{{key}}"}</code> in prompts; filled at call time.
+          </p>
+          {Object.entries(meta.variables).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <code className="bg-muted shrink-0 rounded px-1.5 py-1 text-xs">{k}</code>
+              <Input className="h-8" value={v} onChange={(e) => setVar(k, e.target.value)} />
+              <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => removeVar(k)}>
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <Input className="h-8 w-24" placeholder="key" value={newKey} onChange={(e) => setNewKey(e.target.value)} />
+            <Input className="h-8" placeholder="value" value={newVal} onChange={(e) => setNewVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addVar()} />
+            <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={addVar}>
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
         <Separator />
         <div className="flex flex-col gap-3">
           <Label>Models</Label>
